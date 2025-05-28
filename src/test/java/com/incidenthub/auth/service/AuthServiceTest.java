@@ -168,8 +168,13 @@ class AuthServiceTest {
     void login_invalidUsername() {
         // Arrange
         when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(eq("/api/users/username/testuser"))).thenReturn(requestHeadersSpec);
+        when(requestHeadersUriSpec.uri(
+                eq("/api/users/username/{username}"),
+                eq("testuser")
+        )).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        // Add this line to mock onStatus
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(User.class)).thenReturn(Mono.error(new RuntimeException("User not found")));
 
         // Act & Assert
@@ -188,8 +193,13 @@ class AuthServiceTest {
     void login_invalidPassword() {
         // Arrange
         when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(eq("/api/users/username/testuser"))).thenReturn(requestHeadersSpec);
+        when(requestHeadersUriSpec.uri(
+                eq("/api/users/username/{username}"),
+                eq("testuser")
+        )).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        // Add this line to mock onStatus
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(User.class)).thenReturn(Mono.just(user));
         when(passwordEncoder.matches("password123", "encodedPassword")).thenReturn(false);
 
