@@ -9,9 +9,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-
+import org.springframework.beans.factory.annotation.Value;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 public class AuthService {
@@ -20,13 +21,21 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final WebClient webClient;
 
-    public AuthService(JwtUtil jwtUtil, PasswordEncoder passwordEncoder, WebClient.Builder webClientBuilder) {
+    public AuthService(JwtUtil jwtUtil, PasswordEncoder passwordEncoder, WebClient.Builder webClientBuilder,
+                       @Value("${incidenthub.user-service.url}") String userServiceUrl) {
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
-        this.webClient = webClientBuilder.baseUrl("http://user-service:8082").build();
+        this.webClient = webClientBuilder.baseUrl(userServiceUrl).build();
     }
 
     public Mono<UserDTO> register(UserDTO userDTO) {
+        if (userDTO.getUsername() == null || userDTO.getEmail() == null || userDTO.getPassword() == null) {
+            return Mono.error(new IllegalArgumentException("Invalid user data"));
+        }
+        if (!List.of("ADMIN", "ANALYST", "OPERATOR").contains(userDTO.getRole())) {
+            return Mono.error(new IllegalArgumentException("Invalid role"));
+        }
+
         User user = new User();
         user.setId(UUID.randomUUID());
         user.setUsername(userDTO.getUsername());
@@ -50,6 +59,10 @@ public class AuthService {
     }
 
     public Mono<LoginResponseDTO> login(LoginRequestDTO request) {
+        if (request.getPassword() == null || request.getPassword().isEmpty()) {
+            return Mono.error(new IllegalArgumentException("Password cannot be empty"));
+        }
+
         return webClient.get()
                 .uri("/api/users/username/{username}", request.getUsername())
                 .retrieve()

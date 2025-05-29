@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: auth-service
+  security:
+    jwt:
+      secret: test-jwt-secret-key-256-bit-minimum
+      expiration: 86400000
+
+  sql:
+    init:
+      mode: always
+
+wiremock:
+  server:
+    port: 8090
+
+incidenthub:
+  user-service:
+    url: http://localhost:${wiremock.server.port}

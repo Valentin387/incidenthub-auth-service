@@ -82,7 +82,7 @@ class AuthServiceTest {
         when(webClientBuilder.build()).thenReturn(webClient);
 
         // Create AuthService with the properly mocked builder
-        authService = new AuthService(jwtUtil, passwordEncoder, webClientBuilder);
+        authService = new AuthService(jwtUtil, passwordEncoder, webClientBuilder, "http://localhost:8080");
     }
 
     @Test
