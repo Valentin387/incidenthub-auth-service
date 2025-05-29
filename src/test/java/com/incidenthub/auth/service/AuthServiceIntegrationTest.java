@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
@@ -24,6 +25,8 @@ import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -131,75 +134,124 @@ class AuthServiceIntegrationTest {
 
     @Test
     void registerUserServiceFailure() {
-        // Arrange: Mock User Service failure
-        wireMockServer.stubFor(post(urlEqualTo("/api/users"))
-                .willReturn(aResponse()
-                        .withStatus(HttpStatus.BAD_REQUEST.value())
-                        .withBody("{\"error\": \"Username already exists\"}")));
+        String errorJson = """
+        {
+            "error": "Username already exists"
+        }
+        """;
 
-        // Act & Assert
+        wireMockServer.stubFor(post(urlEqualTo("/api/users"))
+            .withHeader("Content-Type", containing("application/json"))
+            .willReturn(aResponse()
+                .withStatus(HttpStatus.BAD_REQUEST.value())
+                .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .withBody(errorJson)));
+
         StepVerifier.create(authService.register(userDTO))
-                .expectErrorMatches(throwable ->
-                        throwable instanceof RuntimeException &&
-                                throwable.getMessage().contains("User not found")
-                )
-                .verify();
+            .expectErrorMatches(throwable ->
+                throwable instanceof WebClientResponseException.BadRequest &&
+                throwable.getMessage().contains("400 Bad Request")
+            )
+            .verify();
+
+        wireMockServer.verify(postRequestedFor(urlEqualTo("/api/users")));
     }
 
     @Test
     void loginSuccess() {
-        // Arrange: Mock User Service GET /api/users/username/{username}
+        // Create expected response JSON
+        String responseJson = """
+        {
+            "id": "%s",
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "$2a$10$exampleHashedPassword123",
+            "role": "OPERATOR",
+            "createdAt": "%s"
+        }
+        """.formatted(user.getId(), user.getCreatedAt().toString());
+
+        // Set up WireMock with more specific matching
         wireMockServer.stubFor(get(urlEqualTo("/api/users/username/testuser"))
-                .willReturn(aResponse()
-                        .withStatus(HttpStatus.OK.value())
-                        .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                        .withBody("{ \"id\": \"" + user.getId() + "\", \"username\": \"testuser\", \"email\": \"test@example.com\", \"password\": \"$2a$10$exampleHashedPassword123\", \"role\": \"OPERATOR\", \"createdAt\": \"" + user.getCreatedAt() + "\" }")));
+            .willReturn(aResponse()
+                .withStatus(HttpStatus.OK.value())
+                .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .withBody(responseJson)));
 
         // Act & Assert
         StepVerifier.create(authService.login(loginRequestDTO))
-                .expectNextMatches(response -> {
-                    assertThat(response.getToken()).isNotEmpty();
-                    return true;
-                })
-                .verifyComplete();
+            .expectNextMatches(response -> {
+                assertThat(response.getToken()).isNotEmpty();
+                return true;
+            })
+            .verifyComplete();
+
+        // Verify that the request was made
+        wireMockServer.verify(getRequestedFor(urlEqualTo("/api/users/username/testuser")));
     }
 
     @Test
     void loginInvalidUsername() {
-        // Arrange: Mock User Service 404
+        // Create error response JSON
+        String errorJson = """
+        {
+            "error": "User not found"
+        }
+        """;
+
+        // Set up WireMock with more specific matching
         wireMockServer.stubFor(get(urlEqualTo("/api/users/username/testuser"))
-                .willReturn(aResponse()
-                        .withStatus(HttpStatus.NOT_FOUND.value())
-                        .withBody("{\"error\": \"User not found\"}")));
+            .willReturn(aResponse()
+                .withStatus(HttpStatus.NOT_FOUND.value())
+                .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .withBody(errorJson)));
 
         // Act & Assert
         StepVerifier.create(authService.login(loginRequestDTO))
-                .expectErrorMatches(throwable ->
-                        throwable instanceof RuntimeException &&
-                                throwable.getMessage().equals("User not found")
-                )
-                .verify();
+            .expectErrorMatches(throwable ->
+            throwable instanceof RuntimeException &&
+            throwable.getMessage().equals("User not found")
+        )
+        .verify();
+
+        // Verify that the request was made
+        wireMockServer.verify(getRequestedFor(urlEqualTo("/api/users/username/testuser")));
     }
 
     @Test
     void loginInvalidPassword() {
-        // Arrange: Mock User Service GET with valid user
+        // Create expected response JSON
+        String responseJson = """
+        {
+            "id": "%s",
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "$2a$10$exampleHashedPassword123",
+            "role": "OPERATOR",
+            "createdAt": "%s"
+        }
+        """.formatted(user.getId(), user.getCreatedAt().toString());
+
+        // Set up WireMock
         wireMockServer.stubFor(get(urlEqualTo("/api/users/username/testuser"))
-                .willReturn(aResponse()
-                        .withStatus(HttpStatus.OK.value())
-                        .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                        .withBody("{ \"id\": \"" + user.getId() + "\", \"username\": \"testuser\", \"email\": \"test@example.com\", \"password\": \"$2a$10$exampleHashedPassword123\", \"role\": \"OPERATOR\", \"createdAt\": \"" + user.getCreatedAt() + "\" }")));
+            .willReturn(aResponse()
+                .withStatus(HttpStatus.OK.value())
+                .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .withBody(responseJson)));
 
         // Modify login request to use wrong password
         loginRequestDTO.setPassword("wrongpassword");
 
         // Act & Assert
         StepVerifier.create(authService.login(loginRequestDTO))
-                .expectErrorMatches(throwable ->
-                        throwable instanceof RuntimeException &&
-                                throwable.getMessage().equals("Invalid credentials")
-                )
-                .verify();
+            .expectErrorMatches(throwable ->
+            throwable instanceof RuntimeException &&
+            throwable.getMessage().equals("Invalid credentials")
+        )
+        .verify();
+
+        // Verify that the request was made
+        wireMockServer.verify(getRequestedFor(urlEqualTo("/api/users/username/testuser")));
     }
 
     @Test
@@ -209,11 +261,14 @@ class AuthServiceIntegrationTest {
 
         // Act & Assert
         StepVerifier.create(authService.register(userDTO))
-                .expectErrorMatches(throwable ->
-                        throwable instanceof IllegalArgumentException &&
-                                throwable.getMessage().equals("Invalid role")
-                )
-                .verify();
+            .expectErrorMatches(throwable ->
+            throwable instanceof IllegalArgumentException &&
+            throwable.getMessage().equals("Invalid role")
+        )
+        .verify();
+
+        // Verify that no request was made to WireMock
+        wireMockServer.verify(0, postRequestedFor(urlEqualTo("/api/users")));
     }
 
     @Test
@@ -223,7 +278,10 @@ class AuthServiceIntegrationTest {
 
         // Act & Assert
         StepVerifier.create(authService.login(loginRequestDTO))
-                .expectError(IllegalArgumentException.class)
-                .verify();
+            .expectError(IllegalArgumentException.class)
+            .verify();
+
+        // Verify that no request was made to WireMock
+        wireMockServer.verify(0, getRequestedFor(urlMatching("/api/users/username/.*")));
     }
 }
