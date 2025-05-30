@@ -59,11 +59,12 @@ class AuthServiceIntegrationTest {
         loginRequestDTO.setUsername("testuser");
         loginRequestDTO.setPassword("password123");
 
+        // Use a real BCrypt hash for "password123"
         user = new User();
         user.setId(UUID.randomUUID());
         user.setUsername("testuser");
         user.setEmail("test@example.com");
-        user.setPassword("$2a$10$exampleHashedPassword123");
+        user.setPassword("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy");
         user.setRole("OPERATOR");
         user.setCreatedAt(Instant.now());
     }
@@ -159,17 +160,20 @@ class AuthServiceIntegrationTest {
 
     @Test
     void loginSuccess() {
-        // Create expected response JSON
+        // Create a proper BCrypt hash for "password123"
+        String correctPasswordHash = "$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG";  // This is the actual hash for "password123"
+
+        // Create expected response JSON with the correct password hash
         String responseJson = """
         {
             "id": "%s",
             "username": "testuser",
             "email": "test@example.com",
-            "password": "$2a$10$exampleHashedPassword123",
+            "password": "%s",
             "role": "OPERATOR",
             "createdAt": "%s"
         }
-        """.formatted(user.getId(), user.getCreatedAt().toString());
+        """.formatted(user.getId(), correctPasswordHash, user.getCreatedAt().toString());
 
         // Set up WireMock with more specific matching
         wireMockServer.stubFor(get(urlEqualTo("/api/users/username/testuser"))
@@ -226,7 +230,7 @@ class AuthServiceIntegrationTest {
             "id": "%s",
             "username": "testuser",
             "email": "test@example.com",
-            "password": "$2a$10$exampleHashedPassword123",
+            "password": "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy",
             "role": "OPERATOR",
             "createdAt": "%s"
         }
