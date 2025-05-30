@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.test.StepVerifier;
@@ -42,6 +43,10 @@ class AuthServiceIntegrationTest {
     private WireMockServer wireMockServer;
     @Autowired
     private AuthService authService;  // Change from public to private and add @Autowired
+
+    @Autowired
+    private PasswordEncoder passwordEncoder; // Add to generate hash
+
     @Autowired
     private R2dbcEntityTemplate r2dbcEntityTemplate;  // Add this field
     private UserDTO userDTO;
@@ -64,7 +69,8 @@ class AuthServiceIntegrationTest {
         user.setId(UUID.randomUUID());
         user.setUsername("testuser");
         user.setEmail("test@example.com");
-        user.setPassword("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy");
+        // Generate fresh BCrypt hash for password123
+        user.setPassword(passwordEncoder.encode("password123"));
         user.setRole("OPERATOR");
         user.setCreatedAt(Instant.now());
     }
@@ -160,10 +166,6 @@ class AuthServiceIntegrationTest {
 
     @Test
     void loginSuccess() {
-        // Create a proper BCrypt hash for "password123"
-        String correctPasswordHash = "$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG";  // This is the actual hash for "password123"
-
-        // Create expected response JSON with the correct password hash
         String responseJson = """
         {
             "id": "%s",
@@ -173,26 +175,24 @@ class AuthServiceIntegrationTest {
             "role": "OPERATOR",
             "createdAt": "%s"
         }
-        """.formatted(user.getId(), correctPasswordHash, user.getCreatedAt().toString());
+        """.formatted(user.getId(), user.getPassword(), user.getCreatedAt().toString());
 
-        // Set up WireMock with more specific matching
         wireMockServer.stubFor(get(urlEqualTo("/api/users/username/testuser"))
-            .willReturn(aResponse()
-                .withStatus(HttpStatus.OK.value())
-                .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                .withBody(responseJson)));
+                .willReturn(aResponse()
+                        .withStatus(HttpStatus.OK.value())
+                        .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                        .withBody(responseJson)));
 
-        // Act & Assert
         StepVerifier.create(authService.login(loginRequestDTO))
-            .expectNextMatches(response -> {
-                assertThat(response.getToken()).isNotEmpty();
-                return true;
-            })
-            .verifyComplete();
+                .expectNextMatches(response -> {
+                    assertThat(response.getToken()).isNotEmpty();
+                    return true;
+                })
+                .verifyComplete();
 
-        // Verify that the request was made
         wireMockServer.verify(getRequestedFor(urlEqualTo("/api/users/username/testuser")));
     }
+
 
     @Test
     void loginInvalidUsername() {

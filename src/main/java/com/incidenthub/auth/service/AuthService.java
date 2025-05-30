@@ -59,6 +59,8 @@ public class AuthService {
     }
 
     public Mono<LoginResponseDTO> login(LoginRequestDTO request) {
+        System.out.println("REQUEST: ");
+        System.out.println(request);
         if (request.getPassword() == null || request.getPassword().isEmpty()) {
             return Mono.error(new IllegalArgumentException("Password cannot be empty"));
         }
@@ -69,12 +71,16 @@ public class AuthService {
                 .onStatus(status -> status.isError(), response -> Mono.error(new RuntimeException("User not found")))
                 .bodyToMono(User.class)
                 .flatMap(user -> {
+                    System.out.println("USER: ");
+                    System.out.println(user);
                     if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                        System.out.println("MATCHED");
                         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
                         LoginResponseDTO response = new LoginResponseDTO();
                         response.setToken(token);
                         return Mono.just(response);
                     }
+                    System.out.println("NOT MATCHED");
                     return Mono.error(new RuntimeException("Invalid credentials"));
                 });
     }
