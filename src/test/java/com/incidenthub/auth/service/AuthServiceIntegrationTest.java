@@ -185,6 +185,7 @@ class AuthServiceIntegrationTest {
 
         StepVerifier.create(authService.login(loginRequestDTO))
                 .expectNextMatches(response -> {
+                    System.out.println("Generated Token: " + response.getToken());
                     assertThat(response.getToken()).isNotEmpty();
                     return true;
                 })

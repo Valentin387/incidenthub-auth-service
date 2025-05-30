@@ -5,21 +5,23 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import java.security.Key;
-import java.util.Base64;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.UUID;
-import javax.crypto.SecretKey;
-
 
 @Component
 public class JwtUtil {
 
-    @Value("${spring.security.jwt.secret}")
-    private String secret;
+    private final String secret;
+    private final long expiration;
 
-    @Value("${spring.security.jwt.expiration}")
-    private long expiration;
+    public JwtUtil(@Value("${spring.security.jwt.secret}") String secret,
+                   @Value("${spring.security.jwt.expiration}") long expiration) {
+        this.secret = secret;
+        this.expiration = expiration;
+    }
 
     public String generateToken(UUID userId, String username, String role) {
         return Jwts.builder()
@@ -34,20 +36,21 @@ public class JwtUtil {
 
     public Claims validateToken(String token) {
         return Jwts.parser()
-                .verifyWith(getSignKey())  // use verifyWith instead of setSigningKey
+                .verifyWith(getSignKey())
                 .build()
-                .parseSignedClaims(token)  // use parseSignedClaims instead of parseClaimsJws
-                .getPayload();             // use getPayload instead of getBody
+                .parseSignedClaims(token)
+                .getPayload();
     }
-
-
-    private SecretKey getSignKey() {
-        byte[] keyBytes = Base64.getDecoder().decode(secret);
-        return Keys.hmacShaKeyFor(keyBytes);
-    }
-
 
     public String getUserIdFromToken(String token) {
         return validateToken(token).getSubject();
+    }
+
+    private SecretKey getSignKey() {
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            throw new IllegalArgumentException("JWT secret key must be at least 32 bytes for HS256");
+        }
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 }

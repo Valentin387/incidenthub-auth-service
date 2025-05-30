@@ -3,7 +3,7 @@ spring:
     name: auth-service
   security:
     jwt:
-      secret: test-jwt-secret-key-256-bit-minimum
+      secret: ThisIsASecureTestSecretKey1234567890 # 34 chars, >256 bits
       expiration: 86400000
 
   sql:
